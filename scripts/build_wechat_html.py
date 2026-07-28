@@ -16,10 +16,13 @@ build_wechat_html.py — Markdown -> 公众号排版 HTML（配色 × 结构格�
                    深色块 / 报刊双线 / 手账点线 / 极简线 / 简报体
       - 二者相乘共有 100 种组合，预览页上方两组选择器可实时切换
   * 扩展块级元素（受参考文章「SECTION 分栏 + 标签卡片」启发）：
-      - 分栏分隔线：单独一行写 `SECTION 01` → 渲染为居中 "— SECTION 01 —"
+      - 分栏分隔线：
+          · 单独一行写 `--- 任意文字`（或 `*** 任意文字`）→ 渲染为居中 "— 任意文字 —"，文字可任意修改
+          · 旧写法 `SECTION 01` 仍兼容，渲染为 "— SECTION 01 —"
+          · 单独 `---`（无文字）仍是普通无文字分隔线
       - 标签卡片：引用块首行写 `> [!核心判断]` → 渲染为带标签的强调卡片
       - 编号洞察卡：引用块首行写 `> [!01] 标题` → 大号数字 + 标题 + 描述的卡片
-      - 对比双栏：引用块首行写 `> [!compare] A标题 | B标题`，左右两列用 `> |||` 分隔
+      - 对比双栏：引用块首行写 `> [!compare] 左标题 | 右标题`，后续每行 `> 左内容 | 右内容` 自动分两列（逐行对照，无需 `|||`）
         → 渲染为两栏对照卡（左主色 / 右绿色，制造对照）
   * 默认组合（--theme 配色 + --format 格式）由 Python 渲染，保证复制内容正确无误；
     其余组合由页面内 JS 渲染器实时生成，文件小巧。
@@ -28,6 +31,8 @@ build_wechat_html.py — Markdown -> 公众号排版 HTML（配色 × 结构格�
   python3 build_wechat_html.py input.md -o output.html
   python3 build_wechat_html.py input.md --theme classic --format seal   # 文艺古籍观感
   python3 build_wechat_html.py input.md --list-themes                   # 列出全部配色与格式
+  python3 build_wechat_html.py --app -o app.html                        # 生成独立编辑器（不绑定单篇）
+  python3 build_wechat_html.py --serve <目录>                           # 在目录起本地静态服务（托管独立编辑器）
 依赖: 仅 Python 标准库
 """
 
@@ -374,12 +379,13 @@ def make_styles(colors, variant):
         "insight_title": f"display:block;margin:0 0 5px;font-family:{f};font-size:17px;font-weight:bold;line-height:1.45;color:{colors['heading']};",
         "insight_desc": f"display:block;margin:0;{_txt(f, colors['text'])}font-size:15px;line-height:1.7;",
         # 对比双栏：两栏对照卡（左=主色 / 右=绿色，制造对照）
-        "cmp_sec": f"box-sizing:border-box;padding:0.75em 0;",
-        "cmp_tbl": "border-collapse:separate;border-spacing:10px 0;width:100%;",
-        "cmp_td": "vertical-align:top;width:50%;",
-        "cmp_card": f"box-sizing:border-box;padding:1.1em 14px;border-radius:10px;border:1px solid {colors['t_bd']};background-color:{colors['inline_bg']};",
-        "cmp_head": f"display:block;margin:0 0 7px;font-family:{f};font-size:15px;font-weight:bold;color:{colors['accent']};text-align:center;",
-        "cmp_head2": f"display:block;margin:0 0 7px;font-family:{f};font-size:15px;font-weight:bold;color:{colors['qg_bd']};text-align:center;",
+        "cmp_sec": f"box-sizing:border-box;padding:0.4em 0;",
+        "cmp_card": f"box-sizing:border-box;padding:0;border-radius:10px;overflow:hidden;border:1px solid {colors['t_bd']};background-color:#ffffff;",
+        "cmp_tbl": f"border-collapse:collapse;width:100%;font-size:15px;line-height:1.7;{_txt(f, colors['text'])}",
+        "cmp_th": f"padding:10px 14px;text-align:center;font-family:{f};font-weight:bold;font-size:15px;color:{colors['accent']};background-color:{colors['inline_bg']};border-bottom:1px solid {colors['t_bd']};",
+        "cmp_th2": f"padding:10px 14px;text-align:center;font-family:{f};font-weight:bold;font-size:15px;color:{colors['qg_bd']};background-color:{colors['qg_bg']};border-bottom:1px solid {colors['t_bd']};border-left:1px solid {colors['t_bd']};",
+        "cmp_td": f"padding:10px 14px;vertical-align:top;width:50%;border-bottom:1px solid {colors['t_bd']};",
+        "cmp_td2": f"padding:10px 14px;vertical-align:top;width:50%;border-bottom:1px solid {colors['t_bd']};border-left:1px solid {colors['t_bd']};",
     }
     base.update(_variant_overrides(colors, f, variant))
     base.update(_variant_overrides(colors, f, variant))
@@ -509,11 +515,17 @@ def render_hr(s):
     )
 
 
-def render_secdiv(num, s):
+def render_secdiv(num, label, s):
+    if label:
+        txt = esc_text(label)
+    elif num:
+        txt = f"SECTION {num}"
+    else:
+        txt = ""
     return (
         f'<section style="{s["secdiv_sec"]}">'
         f'<span style="{s["secdiv_rule"]}"></span>'
-        f'<span style="{s["secdiv_txt"]}">SECTION {num}</span>'
+        f'<span style="{s["secdiv_txt"]}">{txt}</span>'
         f'<span style="{s["secdiv_rule"]}"></span></section>'
     )
 
@@ -549,27 +561,35 @@ def render_insight(num, lines, s):
     )
 
 
-def render_comparison(headers, left, right, s):
-    def cell(head, lines, head_style):
-        parts = []
-        for ln in lines:
-            ln = ln.strip()
-            parts.append("<br>" if ln == "" else parse_inline(ln, s))
-        body = "".join(parts)
-        return (
-            f'<section style="{s["cmp_card"]}">'
-            f'<p style="{head_style}">{esc_text(head)}</p>'
-            f'<p style="{s["p"]}">{body}</p></section>'
-        )
-    h0 = headers[0] if len(headers) > 0 else ""
-    h1 = headers[1] if len(headers) > 1 else ""
-    return (
-        f'<section style="{s["cmp_sec"]}">'
-        f'<table style="{s["cmp_tbl"]}"><tr>'
-        f'<td style="{s["cmp_td"]}">{cell(h0, left, s["cmp_head"])}</td>'
-        f'<td style="{s["cmp_td"]}">{cell(h1, right, s["cmp_head2"])}</td>'
-        f'</tr></table></section>'
-    )
+def render_comparison(lines, s):
+    head = (lines[0] if lines else "").strip()
+    if "|" in head:
+        lh, rh = head.split("|", 1)
+    else:
+        lh, rh = head, ""
+    lh, rh = lh.strip(), rh.strip()
+    rows = []
+    for ln in lines[1:]:
+        ln = ln.strip()
+        if ln == "":
+            continue
+        if "|" in ln:
+            a, b = ln.split("|", 1)
+        else:
+            a, b = ln, ""
+        rows.append((a.strip(), b.strip()))
+    out = [f'<section style="{s["cmp_sec"]}">', f'<section style="{s["cmp_card"]}">',
+           f'<table style="{s["cmp_tbl"]}"><tr>',
+           f'<td style="{s["cmp_th"]}">{parse_inline(lh, s)}</td>',
+           f'<td style="{s["cmp_th2"]}">{parse_inline(rh, s)}</td>',
+           "</tr>"]
+    for a, b in rows:
+        out.append("<tr>")
+        out.append(f'<td style="{s["cmp_td"]}">{parse_inline(a, s)}</td>')
+        out.append(f'<td style="{s["cmp_td2"]}">{parse_inline(b, s)}</td>')
+        out.append("</tr>")
+    out.append("</table></section></section>")
+    return "".join(out)
 
 
 def render_table(header, rows, s):
@@ -625,6 +645,12 @@ def split_blocks(md_text):
             i += 1
             continue
 
+        m = re.match(r"^(---|\*\*\*|___)\s+(.+)$", stripped)
+        if m:
+            blocks.append(("secdiv", None, m.group(2).strip()))
+            i += 1
+            continue
+
         if re.match(r"^(---|\*\*\*|___)\s*$", stripped):
             blocks.append(("hr", None, None))
             i += 1
@@ -641,15 +667,9 @@ def split_blocks(md_text):
                 rest = cm.group(2).strip()
                 low = raw_label.lower()
                 if low == "compare":
-                    headers = [h.strip() for h in rest.split("|")] if rest else ["", ""]
-                    left, right = [], []
-                    cur = left
-                    for ln in buf[1:]:
-                        if ln.strip() == "|||":
-                            cur = right
-                            continue
-                        cur.append(ln)
-                    blocks.append(("compare", headers, (left, right)))
+                    # 逐行两列：内容[0]=两列标题("左标题 | 右标题")，后续每行 "左 | 右" 为一行对照
+                    content = ([rest] if rest else []) + buf[1:]
+                    blocks.append(("compare", None, content))
                 else:
                     content = ([rest] if rest else []) + buf[1:]
                     if re.fullmatch(r"\d{1,3}", raw_label):
@@ -732,13 +752,13 @@ def convert(md_text, s):
         elif kind == "hr":
             out.append(render_hr(s))
         elif kind == "secdiv":
-            out.append(render_secdiv(blk[1], s))
+            out.append(render_secdiv(blk[1], blk[2], s))
         elif kind == "callout":
             out.append(render_callout(blk[1], blk[2], s))
         elif kind == "insight":
             out.append(render_insight(blk[1], blk[2], s))
         elif kind == "compare":
-            out.append(render_comparison(blk[1], blk[2][0], blk[2][1], s))
+            out.append(render_comparison(blk[2], s))
         elif kind == "table":
             out.append(render_table(blk[1], blk[2], s))
         elif kind == "img":
@@ -776,13 +796,13 @@ def build_blocks_json(md_text):
         elif kind == "hr":
             out.append({"t": "hr"})
         elif kind == "secdiv":
-            out.append({"t": "sd", "n": blk[1]})
+            out.append({"t": "sd", "n": blk[1], "label": blk[2]})
         elif kind == "callout":
             out.append({"t": "co", "label": blk[1], "x": blk[2]})
         elif kind == "insight":
             out.append({"t": "ins", "n": blk[1], "x": blk[2]})
         elif kind == "compare":
-            out.append({"t": "cmp", "h": blk[1], "l": blk[2][0], "r": blk[2][1]})
+            out.append({"t": "cmp", "x": blk[2]})
         elif kind == "table":
             out.append({"t": "tb", "h": blk[1], "r": blk[2]})
         elif kind == "img":
@@ -819,22 +839,67 @@ PREVIEW_TMPL = """<!DOCTYPE html>
   #wechat-body{font-size:16px;padding:0;border-radius:6px;overflow:hidden;}
   .toast{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.8);color:#fff;padding:12px 22px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:20;}
   .toast.show{opacity:1;}
+  .bar button.mode{border:1px solid #e0e0e0;background:#fafafa;color:#555;font-size:14px;padding:8px 16px;border-radius:20px;cursor:pointer;}
+  .bar button.mode:active{transform:scale(0.97);}
+  /* 默认即为左右布局：左编辑、右预览（宽度可拖拽调整） */
+  #mdInput{width:100%;height:80vh;box-sizing:border-box;border:none;outline:none;resize:none;
+    padding:18px 20px;font-family:Consolas,'Courier New',monospace;font-size:14px;line-height:1.7;color:#2b2b2b;background:#fbfbfd;tab-size:2;}
+  #mdInput:focus{background:#fff;}
+  .split{display:flex;align-items:stretch;gap:0;max-width:1320px;margin:10px auto 60px;border:1px solid #ececec;border-radius:10px;overflow:hidden;background:#fff;--edit-w:44%;}
+  .editor-pane{flex:0 0 var(--edit-w,44%);background:#fbfbfd;min-width:0;overflow:auto;}
+  .preview-pane{flex:1 1 56%;min-width:0;overflow:auto;}
+  .resizer{flex:0 0 7px;width:7px;cursor:col-resize;background:#e6e6ea;position:relative;}
+  .resizer:hover,.resizer.active{background:#4a90d9;}
+  .resizer::after{content:"";position:absolute;left:2px;top:50%;transform:translateY(-50%);width:2px;height:30px;background:#b9b9c2;border-radius:1px;}
+  .stage{margin:0 auto;box-shadow:none;max-width:740px;}
+  /* 手机宽度模式：右侧预览锁定为手机宽度，编辑区取剩余空间 */
+  body.phone .editor-pane{flex:1 1 auto;}
+  body.phone .resizer{display:none;}
+  body.phone .preview-pane{flex:0 0 390px;}
+  body.phone .stage{max-width:375px;}
+  /* 仅预览模式：隐藏编辑区与分隔条，预览占满整宽 */
+  body.preview-only .editor-pane{display:none;}
+  body.preview-only .resizer{display:none;}
+  body.preview-only .split{display:block;max-width:740px;margin:10px auto 60px;border:none;background:transparent;overflow:visible;}
+  body.preview-only .preview-pane{flex:none;overflow:visible;}
+  @media (max-width:899px){
+    /* 窄屏：默认仅预览，点“编辑”切到全宽编辑；分隔条在窄屏隐藏 */
+    .split{display:block;max-width:740px;margin:10px auto 60px;border:none;background:transparent;overflow:visible;}
+    .editor-pane{display:none;}
+    .preview-pane{display:block;overflow:visible;}
+    body:not(.preview-only) .editor-pane{display:block;}
+    body:not(.preview-only) .preview-pane{display:none;}
+    .resizer{display:none;}
+    #mdInput{height:62vh;}
+  }
 </style>
 </head>
 <body>
   <div class="bar">
-    <span class="t">__TITLE__</span>
+    <span class="t" id="titleText">__TITLE__</span>
+    <button class="mode" id="phoneBtn">📱 手机</button>
+    <button class="mode" id="editToggle">👁 仅预览</button>
     <button class="copy" id="copyBtn">📋 复制正文</button>
+    __EXTRA_BTNS__
+    <input id="fileInput" type="file" accept=".md,.markdown,.txt,text/markdown" style="display:none">
   </div>
   <div class="selbar">
     <div class="sel-row"><span class="lab">配色</span><span id="colorBtns">__COLOR_BTNS__</span></div>
     <div class="sel-row"><span class="lab">结构格式</span><span id="formatBtns">__FORMAT_BTNS__</span></div>
   </div>
-  <div class="hint">标题请在公众号后台单独填写（本页标题不进入复制区）。上方两组可分别选择「配色」与「结构格式」自由组合，正文实时更新；点击「复制正文」会以当前组合复制，到后台 Ctrl/⌘+V 粘贴即可保留格式。</div>
-  <div class="stage">
-    <section id="wechat-body" style="font-family:__DEF_FONT__;color:__DEF_TEXT__;background-color:__DEF_BG__;">
+  <div class="hint">标题请在公众号后台单独填写（本页标题不进入复制区）。页面默认为「左编辑 / 右预览」布局，左侧改稿右侧实时刷新；中间分隔条可拖动调整左右宽度，点「📱 手机」可把右侧预览锁定为手机宽度查看窄屏效果，点「👁 仅预览」可隐藏编辑区只看排版。上方两组可分别选择「配色」与「结构格式」自由组合，正文实时更新；点击「复制正文」会以当前组合复制，到后台 Ctrl/⌘+V 粘贴即可保留格式。</div>
+  <div class="split" id="split">
+    <div class="pane editor-pane" id="editorPane">
+      <textarea id="mdInput" spellcheck="false"></textarea>
+    </div>
+    <div class="resizer" id="resizer" title="拖动调整左右宽度"></div>
+    <div class="pane preview-pane" id="previewPane">
+      <div class="stage">
+        <section id="wechat-body" style="font-family:__DEF_FONT__;color:__DEF_TEXT__;background-color:__DEF_BG__;">
 __DEF_BODY__
-    </section>
+        </section>
+      </div>
+    </div>
   </div>
   <div class="toast" id="toast"></div>
 <script>
@@ -847,6 +912,7 @@ var COLOR_LABELS = __COLOR_LABELS_JSON__;
 var VARIANT_LABELS = __VARIANT_LABELS_JSON__;
 var DEF_COLOR = __DEF_COLOR__;
 var DEF_FORMAT = __DEF_FORMAT__;
+var SOURCE = __MD_SOURCE_JSON__;
 var curColor = DEF_COLOR, curFormat = DEF_FORMAT;
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -877,6 +943,110 @@ function parseInline(text, s){
   text = text.replace(/(?<!_)_(?!_)(.+?)_(?!_)/g, function(m,p1){ return '<em style="'+s.em+'">'+p1+'</em>'; });
   text = text.replace(/\\u0000CODE(\\d+)\\u0000/g, function(m,idx){ return '<code style="'+s.code+'">'+esc(codes[+idx])+'</code>'; });
   return text;
+}
+
+function stripPipes(s){ while(s.charAt(0)==='|') s=s.slice(1); while(s.charAt(s.length-1)==='|') s=s.slice(0,-1); return s; }
+
+// 浏览器端 Markdown 解析器：忠实移植 Python split_blocks，输出与 build_blocks_json 同构的块数组。
+// 首个 H1 作为标题（不进正文），后续 H1 降级为 H2。
+function parseMarkdown(text){
+  var lines = String(text==null?'':text).split("\\n");
+  var blocks = [];
+  var title = null;
+  var i=0, n=lines.length;
+  while(i<n){
+    var line = lines[i];
+    var stripped = line.replace(/^\\s+/,'').replace(/\\s+$/,'');
+    if(stripped===""){ i++; continue; }
+
+    var m = line.match(/^(`{3,}|~{3,})(.*)$/);
+    if(m){
+      var fence = m[1].charAt(0);
+      var lang = m[2].replace(/^\\s+/,'').replace(/\\s+$/,'');
+      var buf=[]; i++;
+      var fenceRe = new RegExp("^["+fence+"]{3,}\\s*$");
+      while(i<n && !fenceRe.test(lines[i])){ buf.push(lines[i]); i++; }
+      i++;
+      blocks.push({t:"c", lang:lang, x:buf}); continue;
+    }
+
+    m = line.match(/^(#{1,6})\\s+(.*)$/);
+    if(m){
+      var lvl = m[1].length;
+      var c2 = m[2].replace(/^\\s+/,'').replace(/\\s+$/,'');
+      if(lvl===1){ if(title===null){ title=c2; i++; continue; } lvl=2; }
+      blocks.push({t:"h", l:lvl, x:c2}); i++; continue;
+    }
+
+    m = stripped.match(/^(---|\\*\\*\\*|___)\\s+(.+)$/);
+    if(m){ blocks.push({t:"sd", n:null, label:m[2].replace(/^\\s+/,'').replace(/\\s+$/,'')}); i++; continue; }
+
+    if(/^(---|\\*\\*\\*|___)\\s*$/.test(stripped)){ blocks.push({t:"hr"}); i++; continue; }
+
+    if(stripped.charAt(0)===">"){
+      var qbuf=[];
+      while(i<n && lines[i].replace(/^\\s+/,'').replace(/\\s+$/,'')!=="" && lines[i].replace(/^\\s+/,'').charAt(0)===">"){
+        qbuf.push(lines[i].replace(/^>\\s?/, "").replace(/\\s+$/,''));
+        i++;
+      }
+      if(qbuf.length && /^\\[!([^\\]]+)\\]\\s*(.*)$/.test(qbuf[0])){
+        var cm = qbuf[0].match(/^\\[!([^\\]]+)\\]\\s*(.*)$/);
+        var rawLabel = cm[1].replace(/^\\s+/,'').replace(/\\s+$/,'');
+        var rest = cm[2].replace(/^\\s+/,'').replace(/\\s+$/,'');
+                if(rawLabel.toLowerCase()==="compare"){
+          var cmpContent = (rest? [rest]:[]).concat(qbuf.slice(1));
+          blocks.push({t:"cmp", x:cmpContent});
+        } else {
+          var content2 = (rest? [rest]:[]).concat(qbuf.slice(1));
+          if(/^\\d{1,3}$/.test(rawLabel)){ blocks.push({t:"ins", n:rawLabel, x:content2}); }
+          else { blocks.push({t:"co", label:rawLabel, x:content2}); }
+        }
+      } else {
+        blocks.push({t:"q", x:qbuf});
+      }
+      continue;
+    }
+
+    m = stripped.match(/^SECTION\\s+(\\d{1,3})$/i);
+    if(m){ blocks.push({t:"sd", n:m[1], label:null}); i++; continue; }
+
+    if(stripped.indexOf("|")>=0 && i+1<n && /^\\s*\\|?[\\s:|-]+\\|?\\s*$/.test(lines[i+1])){
+      var header = stripPipes(stripped).split("|");
+      i+=2;
+      var rows=[];
+      while(i<n && lines[i].indexOf("|")>=0 && lines[i].replace(/^\\s+/,'').replace(/\\s+$/,'')!==""){
+        rows.push(stripPipes(lines[i].replace(/^\\s+/,'').replace(/\\s+$/,'')).split("|"));
+        i++;
+      }
+      blocks.push({t:"tb", h:header, r:rows}); continue;
+    }
+
+    if(/^(\\s*)([-*+]|\\d+[.)])\\s+/.test(line)){
+      var ordered = /^\\s*\\d+[.)]\\s+/.test(line);
+      var lbuf=[];
+      while(i<n && /^(\\s*)([-*+]|\\d+[.)])\\s+/.test(lines[i])){
+        lbuf.push(lines[i].replace(/^\\s*(?:[-*+]|\\d+[.)])\\s+/, "").replace(/\\s+$/,''));
+        i++;
+      }
+      blocks.push({t:"l", o:ordered, x:lbuf}); continue;
+    }
+
+    m = stripped.match(/^!\\[([^\\]]*)\\]\\(([^)\\s]+)(?:\\s+"([^"]*)")?\\)$/);
+    if(m){ blocks.push({t:"img", a:m[1], u:m[2]}); i++; continue; }
+
+    var pbuf=[];
+    while(i<n && lines[i].replace(/^\\s+/,'').replace(/\\s+$/,'')!==""
+          && !/^(#{1,6})\\s+/.test(lines[i])
+          && !/^(\\s*)([-*+]|\\d+[.)])\\s+/.test(lines[i])
+          && lines[i].replace(/^\\s+/,'').charAt(0)!==">"
+          && !/^(`{3,}|~{3,})/.test(lines[i])
+          && !/^(---|\\*\\*\\*|___)\\s*$/.test(lines[i].replace(/^\\s+/,'').replace(/\\s+$/,''))){
+      pbuf.push(lines[i].replace(/^\\s+/,'').replace(/\\s+$/,''));
+      i++;
+    }
+    blocks.push({t:"p", x:pbuf.join(" ")});
+  }
+  return {title:title, blocks:blocks};
 }
 
 function renderBlock(b, s){
@@ -911,7 +1081,8 @@ function renderBlock(b, s){
     return '<section style="'+s.hr_sec+'"><span style="'+s.hr_inner+'"></span><span style="'+s.hr_dot+'">●</span><span style="'+s.hr_inner+'"></span></section>';
   }
   if(b.t==='sd'){
-    return '<section style="'+s.secdiv_sec+'"><span style="'+s.secdiv_rule+'"></span><span style="'+s.secdiv_txt+'">SECTION '+b.n+'</span><span style="'+s.secdiv_rule+'"></span></section>';
+    var sdtxt = (b.label!=null && b.label!=='') ? b.label : (b.n!=null ? 'SECTION '+b.n : '');
+    return '<section style="'+s.secdiv_sec+'"><span style="'+s.secdiv_rule+'"></span><span style="'+s.secdiv_txt+'">'+esc(sdtxt)+'</span><span style="'+s.secdiv_rule+'"></span></section>';
   }
   if(b.t==='co'){
     var parts = b.x.map(function(ln){ ln=ln.trim(); return ln==='' ? '<br>' : parseInline(ln, s); });
@@ -927,15 +1098,25 @@ function renderBlock(b, s){
       +'</td></tr></table></section>';
   }
   if(b.t==='cmp'){
-    function cmpCell(head, lines, headStyle){
-      var body = lines.map(function(ln){ ln=ln.trim(); return ln==='' ? '<br>' : parseInline(ln, s); }).join('');
-      return '<section style="'+s.cmp_card+'"><p style="'+headStyle+'">'+esc(head)+'</p><p style="'+s.p+'">'+body+'</p></section>';
+    var x = b.x || [];
+    var head = (x[0]||'').trim();
+    var hp = head.indexOf('|')>=0 ? head.split('|') : [head, ''];
+    var lh = hp[0].trim(), rh = hp.length>1 ? hp[1].trim() : '';
+    var rows = [];
+    for(var ri=1; ri<x.length; ri++){
+      var ln = x[ri].trim(); if(ln==='') continue;
+      var sp = ln.indexOf('|')>=0 ? ln.split('|') : [ln, ''];
+      rows.push([sp[0].trim(), sp.length>1 ? sp[1].trim() : '']);
     }
-    var h0 = b.h.length>0 ? b.h[0] : '', h1 = b.h.length>1 ? b.h[1] : '';
-    return '<section style="'+s.cmp_sec+'"><table style="'+s.cmp_tbl+'"><tr>'
-      +'<td style="'+s.cmp_td+'">'+cmpCell(h0, b.l, s.cmp_head)+'</td>'
-      +'<td style="'+s.cmp_td+'">'+cmpCell(h1, b.r, s.cmp_head2)+'</td>'
-      +'</tr></table></section>';
+    var o = '<section style="'+s.cmp_sec+'"><section style="'+s.cmp_card+'"><table style="'+s.cmp_tbl+'"><tr>'
+      +'<td style="'+s.cmp_th+'">'+parseInline(lh, s)+'</td>'
+      +'<td style="'+s.cmp_th2+'">'+parseInline(rh, s)+'</td></tr>';
+    for(var rj=0; rj<rows.length; rj++){
+      o += '<tr><td style="'+s.cmp_td+'">'+parseInline(rows[rj][0], s)+'</td>'
+        +'<td style="'+s.cmp_td2+'">'+parseInline(rows[rj][1], s)+'</td></tr>';
+    }
+    o += '</table></section></section>';
+    return o;
   }
   if(b.t==='tb'){
     var th = b.h.map(function(c){ return '<th style="'+s.th+'">'+parseInline(c.trim(), s)+'</th>'; }).join('');
@@ -988,7 +1169,74 @@ document.getElementById('colorBtns').addEventListener('click',function(e){
 document.getElementById('formatBtns').addEventListener('click',function(e){
   if(e.target && e.target.getAttribute('data-variant')){ applyCombo(curColor, e.target.getAttribute('data-variant')); }
 });
-applyCombo(DEF_COLOR, DEF_FORMAT);
+document.getElementById('editToggle').addEventListener('click',function(){
+  document.body.classList.toggle('preview-only');
+  if(document.body.classList.contains('preview-only')){ document.body.classList.remove('phone'); syncModeLabels(); }
+  this.textContent = document.body.classList.contains('preview-only') ? '✏️ 编辑' : '👁 仅预览';
+});
+function syncModeLabels(){
+  var ph=document.getElementById('phoneBtn'), tg=document.getElementById('editToggle');
+  if(ph){ ph.textContent = document.body.classList.contains('phone') ? '💻 宽屏' : '📱 手机'; }
+  if(tg){ tg.textContent = document.body.classList.contains('preview-only') ? '✏️ 编辑' : '👁 仅预览'; }
+}
+document.getElementById('phoneBtn').addEventListener('click',function(){
+  var on=document.body.classList.toggle('phone');
+  if(on){ document.body.classList.remove('preview-only'); }
+  syncModeLabels();
+});
+(function resizer(){
+  var split=document.getElementById('split');
+  var rz=document.getElementById('resizer');
+  if(!split||!rz) return;
+  var dragging=false;
+  function setPct(clientX){
+    var rect=split.getBoundingClientRect();
+    var pct=((clientX-rect.left)/rect.width)*100;
+    if(pct<18) pct=18; if(pct>82) pct=82;
+    split.style.setProperty('--edit-w', pct.toFixed(1)+'%');
+  }
+  function down(e){
+    if(document.body.classList.contains('preview-only')||document.body.classList.contains('phone')) return;
+    dragging=true; rz.classList.add('active');
+    document.body.style.cursor='col-resize'; document.body.style.userSelect='none';
+    if(e.cancelable) e.preventDefault();
+  }
+  function move(e){
+    if(!dragging) return;
+    var x = e.touches ? e.touches[0].clientX : e.clientX;
+    setPct(x); if(e.cancelable) e.preventDefault();
+  }
+  function up(){ if(dragging){ dragging=false; rz.classList.remove('active'); document.body.style.cursor=''; document.body.style.userSelect=''; } }
+  rz.addEventListener('mousedown',down);
+  rz.addEventListener('touchstart',down,{passive:false});
+  window.addEventListener('mousemove',move);
+  window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('mouseup',up);
+  window.addEventListener('touchend',up);
+})();
+function setTitle(t){ var el=document.getElementById('titleText'); if(el){ el.textContent = t ? t : '（未检测到标题，请在后台填写）'; } }
+var editTimer=null;
+document.getElementById('mdInput').addEventListener('input',function(){
+  clearTimeout(editTimer);
+  editTimer=setTimeout(function(){
+    var ps=parseMarkdown(document.getElementById('mdInput').value);
+    if(ps && ps.blocks){ BLOCKS=ps.blocks; }
+    if(ps && ps.title){ setTitle(ps.title); }
+    applyCombo(curColor, curFormat);
+  },250);
+});
+(function init(){
+  // 窄屏默认进入“仅预览”模式（编辑区在窄屏下单独全宽展示）
+  if(window.innerWidth < 900){ document.body.classList.add('preview-only'); }
+  if(typeof syncModeLabels==='function'){ syncModeLabels(); }
+  var ta=document.getElementById('mdInput');
+  if(ta){ ta.value = (SOURCE==null?'':SOURCE); }
+  var ps=parseMarkdown(SOURCE==null?'':SOURCE);
+  if(ps && ps.blocks && ps.blocks.length){ BLOCKS=ps.blocks; }
+  if(ps && ps.title){ setTitle(ps.title); }
+  applyCombo(DEF_COLOR, DEF_FORMAT);
+})();
+__EXTRA_JS__
 </script>
 </body>
 </html>
@@ -1000,8 +1248,90 @@ def _safe_json(obj):
     return json.dumps(obj, ensure_ascii=False).replace("</", "<\\/")
 
 
+# 独立编辑器（--app）内置的示例文档：覆盖全部块类型，作为首次打开的引导。
+APP_SAMPLE_MD = """# 公众号排版编辑器（示例）
+
+这是 **公众号排版** 的在线编辑器。左侧写 Markdown，右侧实时预览；顶部切换「配色 × 结构格式」自由组合，满意后点「📋 复制正文」到后台粘贴即可。
+
+> [!核心判断] 本页 100% 在浏览器里完成转换，不依赖服务器，也可离线使用。
+
+--- 怎么写分栏
+
+单独一行写 `--- 任意文字` 就能插入一条带文字的分栏线，文字随便改（旧的 `SECTION 01` 也仍然可用）。
+
+> [!01] 标签卡片
+用 `> [!标签] 内容` 写带小标签的强调卡片，区别于普通引用。
+
+> [!02] 编号洞察卡
+用 `> [!01] 标题` 写「大号数字 + 标题 + 描述」的卡片。
+
+> [!compare] 过去写法 | 现在写法
+> 纯文字堆砌 | 结构化卡片
+> 复制进后台对不齐 | 内联样式粘贴即所见
+
+| 能力 | 说明 |
+| --- | --- |
+| 编辑 + 预览 | 左写右看，实时刷新 |
+| 配色 × 格式 | 10×10 共 100 种组合 |
+| 一键复制 | 内联样式，粘贴保格式 |
+
+1. 支持有序列表
+2. 支持 `行内代码`
+3. 支持 [链接](https://example.com)
+
+> 普通引用会自动按关键词分色（蓝 / 橙 / 绿）。
+
+点顶部「📂 打开」可载入本地 .md 文件；你的草稿会自动保存在本机浏览器里。
+"""
+
+# 独立编辑器（--app）专属的前端逻辑：打开本地 .md、新建空白、草稿自动保存。
+STANDALONE_JS = r"""
+// ===== 独立编辑器专属：打开 / 新建 / 草稿自动保存 =====
+var STANDALONE = true;
+var STORAGE_KEY = 'wxmd_draft_v1';
+function _saveDraft(){ try{ localStorage.setItem(STORAGE_KEY, document.getElementById('mdInput').value); }catch(e){} }
+function _loadDraft(){ try{ var d=localStorage.getItem(STORAGE_KEY); return (d===null)?null:d; }catch(e){ return null; } }
+// 打开本地文件
+(function(){
+  var fi=document.getElementById('fileInput'); if(!fi) return;
+  fi.addEventListener('change', function(e){
+    var f=e.target.files && e.target.files[0]; if(!f) return;
+    var r=new FileReader();
+    r.onload=function(){
+      var ta=document.getElementById('mdInput'); ta.value=r.result;
+      var ps=parseMarkdown(r.result); if(ps&&ps.blocks){ BLOCKS=ps.blocks; } if(ps&&ps.title){ setTitle(ps.title); }
+      applyCombo(curColor, curFormat); _saveDraft(); toast('已载入 '+f.name);
+    };
+    r.readAsText(f);
+    e.target.value='';
+  });
+})();
+(function(){
+  var ob=document.getElementById('openBtn'); if(ob){ ob.addEventListener('click', function(){ document.getElementById('fileInput').click(); }); }
+  var nb=document.getElementById('newBtn'); if(nb){ nb.addEventListener('click', function(){
+    if(!confirm('清空当前内容，新建空白文章？')) return;
+    var ta=document.getElementById('mdInput'); ta.value=''; BLOCKS=[]; setTitle(''); applyCombo(curColor, curFormat); _saveDraft();
+  }); }
+})();
+// 输入即自动保存（与已有 input 监听并行，不冲突）
+(function(){
+  var ta=document.getElementById('mdInput'); if(!ta) return;
+  ta.addEventListener('input', function(){ _saveDraft(); });
+})();
+// 优先恢复上次草稿
+(function(){
+  var d=_loadDraft();
+  if(d!==null && d!==''){
+    var ta=document.getElementById('mdInput'); if(ta){ ta.value=d; }
+    var ps=parseMarkdown(d); if(ps&&ps.blocks){ BLOCKS=ps.blocks; } if(ps&&ps.title){ setTitle(ps.title); } applyCombo(curColor, curFormat);
+  }
+})();
+"""
+
+
 def build_preview(title, blocks_json, styles_json, meta_json,
-                  default_color, default_format, default_body):
+                  default_color, default_format, default_body, md_source,
+                  standalone=False):
     color_btns = "".join(
         f'<button data-color="{c}" class="{"active" if c == default_color else ""}">'
         f'{COLOR_LABELS[c]}</button>'
@@ -1013,17 +1343,30 @@ def build_preview(title, blocks_json, styles_json, meta_json,
         for v in VARIANT_ORDER
     )
     title_html = title if title else "（未检测到标题，请在后台填写）"
+
+    if standalone:
+        extra_btns = (
+            '<button class="mode" id="openBtn">📂 打开</button>'
+            '<button class="mode" id="newBtn">🆕 新建</button>'
+        )
+        extra_js = STANDALONE_JS
+    else:
+        extra_btns = ""
+        extra_js = ""
+
     return (
         PREVIEW_TMPL
         .replace("__SANS__", SANS)
         .replace("__TITLE__", title_html)
         .replace("__COLOR_BTNS__", color_btns)
         .replace("__FORMAT_BTNS__", format_btns)
+        .replace("__EXTRA_BTNS__", extra_btns)
         .replace("__DEF_FONT__", COLORS[default_color]["font"])
         .replace("__DEF_TEXT__", COLORS[default_color]["text"])
         .replace("__DEF_BG__", COLORS[default_color]["body_bg"])
         .replace("__DEF_BODY__", default_body)
         .replace("__BLOCKS_JSON__", _safe_json(blocks_json))
+        .replace("__MD_SOURCE_JSON__", _safe_json(md_source))
         .replace("__STYLES_JSON__", _safe_json(styles_json))
         .replace("__META_JSON__", _safe_json(meta_json))
         .replace("__COLOR_ORDER_JSON__", _safe_json(COLOR_ORDER))
@@ -1034,6 +1377,7 @@ def build_preview(title, blocks_json, styles_json, meta_json,
         .replace("__DEF_FORMAT__", json.dumps(default_format))
         .replace("__Q_EDITOR_JSON__", _safe_json(QUOTE_EDITOR_KEYWORDS))
         .replace("__Q_ANCIENT_JSON__", _safe_json(QUOTE_ANCIENT_KEYWORDS))
+        .replace("__EXTRA_JS__", extra_js)
     )
 
 
@@ -1050,7 +1394,28 @@ def main():
     ap.add_argument("--format", default=DEFAULT_FORMAT, choices=VARIANT_ORDER,
                     help="默认结构格式（预览页可继续切换组合）")
     ap.add_argument("--list-themes", action="store_true", help="列出全部配色与格式并退出")
+    ap.add_argument("--app", action="store_true",
+                    help="生成独立编辑器（不绑定单篇文章：内置示例文档、支持打开本地 .md、草稿自动保存）")
+    ap.add_argument("--serve", metavar="DIR",
+                    help="在指定目录启动本地静态服务（用于托管独立编辑器，获得最佳剪贴板支持）")
     args = ap.parse_args()
+
+    if args.serve:
+        import http.server
+        import socketserver
+        d = os.path.abspath(args.serve)
+        if not os.path.isdir(d):
+            sys.exit(f"[错误] 目录不存在: {d}")
+        os.chdir(d)
+        port = 8000
+        handler = http.server.SimpleHTTPRequestHandler
+        try:
+            with socketserver.TCPServer(("", port), handler) as httpd:
+                print(f"[服务] 已启动: http://localhost:{port}  (Ctrl+C 停止)")
+                httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\n[服务] 已停止。")
+        return
 
     if args.list_themes:
         print("配色方案（--theme）：")
@@ -1060,6 +1425,31 @@ def main():
         for v in VARIANT_ORDER:
             print(f"  {v:8s} - {VARIANT_LABELS[v]}  ({VARIANT_DESC[v]})")
         print(f"\n共 {len(COLOR_ORDER)}×{len(VARIANT_ORDER)} = {len(COLOR_ORDER)*len(VARIANT_ORDER)} 种组合。")
+        return
+
+    if args.app:
+        md_text = APP_SAMPLE_MD
+        default_style = STYLES[(args.theme, args.format)]
+        title, default_body = convert(md_text, default_style)
+        _, blocks_json = build_blocks_json(md_text)
+        styles_json = {
+            c: {v: STYLES[(c, v)] for v in VARIANT_ORDER}
+            for c in COLOR_ORDER
+        }
+        meta_json = {
+            c: {"font": COLORS[c]["font"], "text": COLORS[c]["text"], "bg": COLORS[c]["body_bg"]}
+            for c in COLOR_ORDER
+        }
+        preview = build_preview(title, blocks_json, styles_json, meta_json,
+                                args.theme, args.format, default_body, md_text,
+                                standalone=True)
+        out_path = args.output or "wechat-app.html"
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(preview)
+        print(f"[完成] 独立编辑器已生成: {out_path}")
+        print(f"        默认组合: 配色 {args.theme}({COLOR_LABELS[args.theme]}) × "
+              f"格式 {args.format}({VARIANT_LABELS[args.format]})")
+        print(f"        用法: python3 build_wechat_html.py --serve .   然后浏览器打开 http://localhost:8000/{os.path.basename(out_path)}")
         return
 
     if not args.input:
@@ -1085,7 +1475,7 @@ def main():
     }
 
     preview = build_preview(title, blocks_json, styles_json, meta_json,
-                            args.theme, args.format, default_body)
+                            args.theme, args.format, default_body, md_text)
 
     out_path = args.output or (os.path.splitext(args.input)[0] + ".wechat.html")
     with open(out_path, "w", encoding="utf-8") as f:
