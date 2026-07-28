@@ -9,12 +9,18 @@ build_wechat_html.py — Markdown -> 公众号排版 HTML（配色 × 结构格�
   * 文档首个 H1 视为标题，不进入复制区（标题在后台单独填写）
   * 引用块按内容关键词自动分类：蓝(古文) / 橙(编者按) / 绿(普通)
   * 配色（COLOR）与结构格式（VARIANT）完全解耦，可任意组合：
-      - 9 套配色：简约蓝 / 文艺古籍 / 科技青 / 清新绿 / 暖橙生活 /
-                  暗夜 / 报刊红 / 手账暖 / 极简灰
-      - 9 套结构格式（标题/引用/高亮三要素结构各异）：
-                  左色条 / 居中双线 / 色块 / 虚线签 / 填充条 /
-                  深色块 / 报刊双线 / 手账点线 / 极简线
-      - 二者相乘共有 81 种组合，预览页上方两组选择器可实时切换
+      - 10 套配色：简约蓝 / 文艺古籍 / 科技青 / 清新绿 / 暖橙生活 /
+                   暗夜 / 报刊红 / 手账暖 / 极简灰 / 商业简报
+      - 10 套结构格式（标题/引用/高亮三要素结构各异）：
+                   左色条 / 居中双线 / 色块 / 虚线签 / 填充条 /
+                   深色块 / 报刊双线 / 手账点线 / 极简线 / 简报体
+      - 二者相乘共有 100 种组合，预览页上方两组选择器可实时切换
+  * 扩展块级元素（受参考文章「SECTION 分栏 + 标签卡片」启发）：
+      - 分栏分隔线：单独一行写 `SECTION 01` → 渲染为居中 "— SECTION 01 —"
+      - 标签卡片：引用块首行写 `> [!核心判断]` → 渲染为带标签的强调卡片
+      - 编号洞察卡：引用块首行写 `> [!01] 标题` → 大号数字 + 标题 + 描述的卡片
+      - 对比双栏：引用块首行写 `> [!compare] A标题 | B标题`，左右两列用 `> |||` 分隔
+        → 渲染为两栏对照卡（左主色 / 右绿色，制造对照）
   * 默认组合（--theme 配色 + --format 格式）由 Python 渲染，保证复制内容正确无误；
     其余组合由页面内 JS 渲染器实时生成，文件小巧。
 
@@ -123,13 +129,22 @@ COLORS = {
         qg_bd="#cccccc", qg_bg="transparent", qg_fg="#555555",
         hr="#dddddd", t_bd="#e0e0e0", th_bg="#f7f7f7", th_fg="#222222",
     ),
+    "brief": dict(  # 商业简报（墨蓝 + 编辑感卡片，适合商业/组织/咨询类长文）
+        accent="#1f3a5f", text="#33373d", heading="#16191d", strong="#111111", font=SANS,
+        sec_bg="transparent", body_bg="#ffffff", code_bg="#1f2933", code_fg="#d7e3ee",
+        inline_bg="#eef2f7", inline_fg="#1f3a5f",
+        qb_bd="#1f3a5f", qb_bg="#eef2f7", qb_fg="#1a3c5e",
+        qo_bd="#c8842b", qo_bg="#fbf3e6", qo_fg="#8a5a1e",
+        qg_bd="#3f7d5a", qg_bg="#eef5f0", qg_fg="#2c5a40",
+        hr="#d9dde2", t_bd="#d9dde2", th_bg="#eef2f7", th_fg="#16191d",
+    ),
 }
 
-COLOR_ORDER = ["blue", "classic", "tech", "green", "warm", "dark", "news", "note", "minimal"]
+COLOR_ORDER = ["blue", "classic", "tech", "green", "warm", "dark", "news", "note", "minimal", "brief"]
 COLOR_LABELS = {
     "blue": "简约蓝", "classic": "文艺古籍", "tech": "科技青",
     "green": "清新绿", "warm": "暖橙生活", "dark": "暗夜",
-    "news": "报刊红", "note": "手账暖", "minimal": "极简灰",
+    "news": "报刊红", "note": "手账暖", "minimal": "极简灰", "brief": "商业简报",
 }
 DEFAULT_COLOR = "blue"
 
@@ -140,11 +155,11 @@ DEFAULT_COLOR = "blue"
 #   marker=虚线标签+胶带条  card=填充条+阴影卡     night=深色块
 #   news=双线+粗左条+波浪线  note=点线+虚线框+荧光笔  minimal=居中细线+大引号
 # ----------------------------------------------------------------------------
-VARIANT_ORDER = ["sidebar", "seal", "chip", "marker", "card", "night", "news", "note", "minimal"]
+VARIANT_ORDER = ["sidebar", "seal", "chip", "marker", "card", "night", "news", "note", "minimal", "report"]
 VARIANT_LABELS = {
     "sidebar": "左色条", "seal": "居中双线", "chip": "色块", "marker": "虚线签",
     "card": "填充条", "night": "深色块", "news": "报刊双线", "note": "手账点线",
-    "minimal": "极简线",
+    "minimal": "极简线", "report": "简报体",
 }
 VARIANT_DESC = {
     "sidebar": "标题左侧色条 / 左条引文 / 纯色加粗",
@@ -156,6 +171,7 @@ VARIANT_DESC = {
     "news": "标题双线 / 粗左条引文 / 波浪下划线",
     "note": "标题点线 / 虚线框引文 / 荧光笔",
     "minimal": "标题居中细线 / 大引号无框引文 / 纯粗体",
+    "report": "标题顶规 / 卡片引文 / 药丸高亮",
 }
 DEFAULT_FORMAT = "sidebar"
 
@@ -285,6 +301,13 @@ def _variant_overrides(p, f, variant):
             o[k] = q_bare(q)
         o["q_glyph"] = (f'<span style="display:block;font-family:{f};font-size:42px;line-height:0.7;'
                         f'color:{a};font-weight:bold;">“</span>')
+    elif variant == "report":
+        o["h2"] = (f"display:block;margin:0;padding:14px 0 8px;font-size:20px;font-weight:bold;"
+                   f"line-height:1.4;letter-spacing:1px;{_txt(f, h)}border-top:3px solid {a};")
+        o["strong"] = (f"font-weight:bold;color:{a};background-color:{p['inline_bg']};padding:1px 4px;border-radius:3px;")
+        for k, q in (("quote_blue", qb), ("quote_orange", qo), ("quote_green", qg)):
+            o[k] = q_box(q, radius="8px", bar="6px")
+        o["q_glyph"] = ""
     else:  # 兜底：sidebar
         o["h2"] = (f"display:block;margin:0;padding:0 0 0 12px;font-size:20px;font-weight:bold;"
                    f"line-height:1.4;{_txt(f, h)}border-left:4px solid {a};")
@@ -335,7 +358,30 @@ def make_styles(colors, variant):
               f"{_txt(f, colors['th_fg'])}font-weight:bold;text-align:left;",
         "td": f"border:1px solid {colors['t_bd']};padding:8px 12px;text-align:left;{_txt(f, colors['text'])};",
         "wrapper": f"box-sizing:border-box;width:100%;margin:0;background-color:{colors['body_bg']};padding:0.6em 16px;",
+        "accent": colors["accent"],
+        "inline_bg": colors["inline_bg"],
+        "secdiv_sec": "box-sizing:border-box;padding:1.4em 0;text-align:center;",
+        "secdiv_rule": f"display:inline-block;width:40px;height:1px;background-color:{colors['accent']};vertical-align:middle;",
+        "secdiv_txt": f"display:inline-block;margin:0 14px;color:{colors['accent']};font-size:13px;letter-spacing:3px;font-weight:bold;font-family:{f};",
+        "callout_sec": f"box-sizing:border-box;padding:1.2em 18px;border-radius:8px;border-left:4px solid {colors['accent']};background-color:{colors['inline_bg']};",
+        "callout_label": f"display:block;font-size:13px;font-weight:bold;letter-spacing:2px;color:{colors['accent']};font-family:{f};margin:0 0 6px;",
+        # 编号洞察卡：大号数字 + 标题 + 描述
+        "insight_sec": f"box-sizing:border-box;padding:1.1em 16px;border-radius:10px;border-left:4px solid {colors['accent']};background-color:{colors['inline_bg']};",
+        "insight_tbl": "border-collapse:collapse;width:100%;",
+        "insight_num_cell": "vertical-align:top;width:56px;",
+        "insight_num": f"display:block;font-family:{f};font-size:38px;line-height:1;font-weight:bold;color:{colors['accent']};",
+        "insight_body": "vertical-align:top;",
+        "insight_title": f"display:block;margin:0 0 5px;font-family:{f};font-size:17px;font-weight:bold;line-height:1.45;color:{colors['heading']};",
+        "insight_desc": f"display:block;margin:0;{_txt(f, colors['text'])}font-size:15px;line-height:1.7;",
+        # 对比双栏：两栏对照卡（左=主色 / 右=绿色，制造对照）
+        "cmp_sec": f"box-sizing:border-box;padding:0.75em 0;",
+        "cmp_tbl": "border-collapse:separate;border-spacing:10px 0;width:100%;",
+        "cmp_td": "vertical-align:top;width:50%;",
+        "cmp_card": f"box-sizing:border-box;padding:1.1em 14px;border-radius:10px;border:1px solid {colors['t_bd']};background-color:{colors['inline_bg']};",
+        "cmp_head": f"display:block;margin:0 0 7px;font-family:{f};font-size:15px;font-weight:bold;color:{colors['accent']};text-align:center;",
+        "cmp_head2": f"display:block;margin:0 0 7px;font-family:{f};font-size:15px;font-weight:bold;color:{colors['qg_bd']};text-align:center;",
     }
+    base.update(_variant_overrides(colors, f, variant))
     base.update(_variant_overrides(colors, f, variant))
     return base
 
@@ -463,6 +509,69 @@ def render_hr(s):
     )
 
 
+def render_secdiv(num, s):
+    return (
+        f'<section style="{s["secdiv_sec"]}">'
+        f'<span style="{s["secdiv_rule"]}"></span>'
+        f'<span style="{s["secdiv_txt"]}">SECTION {num}</span>'
+        f'<span style="{s["secdiv_rule"]}"></span></section>'
+    )
+
+
+def render_callout(label, lines, s):
+    parts = []
+    for ln in lines:
+        ln = ln.strip()
+        parts.append("<br>" if ln == "" else parse_inline(ln, s))
+    inner = "".join(parts)
+    return (
+        f'<section style="{s["callout_sec"]}">'
+        f'<span style="{s["callout_label"]}">{esc_text(label)}</span>'
+        f'<p style="{s["p"]}">{inner}</p></section>'
+    )
+
+
+def render_insight(num, lines, s):
+    title = parse_inline(" ".join(lines[0:1]).strip(), s) if lines else ""
+    desc_parts = []
+    for ln in lines[1:]:
+        ln = ln.strip()
+        desc_parts.append("<br>" if ln == "" else parse_inline(ln, s))
+    desc = "".join(desc_parts)
+    return (
+        f'<section style="{s["insight_sec"]}">'
+        f'<table style="{s["insight_tbl"]}"><tr>'
+        f'<td style="{s["insight_num_cell"]}"><span style="{s["insight_num"]}">{esc_text(num)}</span></td>'
+        f'<td style="{s["insight_body"]}">'
+        f'<p style="{s["insight_title"]}">{title}</p>'
+        + (f'<p style="{s["insight_desc"]}">{desc}</p>' if desc else "")
+        + f'</td></tr></table></section>'
+    )
+
+
+def render_comparison(headers, left, right, s):
+    def cell(head, lines, head_style):
+        parts = []
+        for ln in lines:
+            ln = ln.strip()
+            parts.append("<br>" if ln == "" else parse_inline(ln, s))
+        body = "".join(parts)
+        return (
+            f'<section style="{s["cmp_card"]}">'
+            f'<p style="{head_style}">{esc_text(head)}</p>'
+            f'<p style="{s["p"]}">{body}</p></section>'
+        )
+    h0 = headers[0] if len(headers) > 0 else ""
+    h1 = headers[1] if len(headers) > 1 else ""
+    return (
+        f'<section style="{s["cmp_sec"]}">'
+        f'<table style="{s["cmp_tbl"]}"><tr>'
+        f'<td style="{s["cmp_td"]}">{cell(h0, left, s["cmp_head"])}</td>'
+        f'<td style="{s["cmp_td"]}">{cell(h1, right, s["cmp_head2"])}</td>'
+        f'</tr></table></section>'
+    )
+
+
 def render_table(header, rows, s):
     th = "".join(f'<th style="{s["th"]}">{parse_inline(c.strip(), s)}</th>' for c in header)
     body = "".join(
@@ -526,7 +635,35 @@ def split_blocks(md_text):
             while i < n and lines[i].strip().startswith(">"):
                 buf.append(re.sub(r"^>\s?", "", lines[i]).rstrip())
                 i += 1
-            blocks.append(("quote", None, buf))
+            if buf and re.match(r"^\[!([^\]]+)\]\s*(.*)$", buf[0]):
+                cm = re.match(r"^\[!([^\]]+)\]\s*(.*)$", buf[0])
+                raw_label = cm.group(1).strip()
+                rest = cm.group(2).strip()
+                low = raw_label.lower()
+                if low == "compare":
+                    headers = [h.strip() for h in rest.split("|")] if rest else ["", ""]
+                    left, right = [], []
+                    cur = left
+                    for ln in buf[1:]:
+                        if ln.strip() == "|||":
+                            cur = right
+                            continue
+                        cur.append(ln)
+                    blocks.append(("compare", headers, (left, right)))
+                else:
+                    content = ([rest] if rest else []) + buf[1:]
+                    if re.fullmatch(r"\d{1,3}", raw_label):
+                        blocks.append(("insight", raw_label, content))
+                    else:
+                        blocks.append(("callout", raw_label, content))
+            else:
+                blocks.append(("quote", None, buf))
+            continue
+
+        m = re.match(r"^SECTION\s+(\d{1,3})$", stripped, re.IGNORECASE)
+        if m:
+            blocks.append(("secdiv", m.group(1), None))
+            i += 1
             continue
 
         if "|" in stripped and i + 1 < n and re.match(r"^\s*\|?[\s:|-]+\|?\s*$", lines[i + 1]):
@@ -594,6 +731,14 @@ def convert(md_text, s):
             out.append(render_list(blk[2], blk[1], s))
         elif kind == "hr":
             out.append(render_hr(s))
+        elif kind == "secdiv":
+            out.append(render_secdiv(blk[1], s))
+        elif kind == "callout":
+            out.append(render_callout(blk[1], blk[2], s))
+        elif kind == "insight":
+            out.append(render_insight(blk[1], blk[2], s))
+        elif kind == "compare":
+            out.append(render_comparison(blk[1], blk[2][0], blk[2][1], s))
         elif kind == "table":
             out.append(render_table(blk[1], blk[2], s))
         elif kind == "img":
@@ -630,6 +775,14 @@ def build_blocks_json(md_text):
             out.append({"t": "l", "o": blk[1], "x": blk[2]})
         elif kind == "hr":
             out.append({"t": "hr"})
+        elif kind == "secdiv":
+            out.append({"t": "sd", "n": blk[1]})
+        elif kind == "callout":
+            out.append({"t": "co", "label": blk[1], "x": blk[2]})
+        elif kind == "insight":
+            out.append({"t": "ins", "n": blk[1], "x": blk[2]})
+        elif kind == "compare":
+            out.append({"t": "cmp", "h": blk[1], "l": blk[2][0], "r": blk[2][1]})
         elif kind == "table":
             out.append({"t": "tb", "h": blk[1], "r": blk[2]})
         elif kind == "img":
@@ -756,6 +909,33 @@ function renderBlock(b, s){
   }
   if(b.t==='hr'){
     return '<section style="'+s.hr_sec+'"><span style="'+s.hr_inner+'"></span><span style="'+s.hr_dot+'">●</span><span style="'+s.hr_inner+'"></span></section>';
+  }
+  if(b.t==='sd'){
+    return '<section style="'+s.secdiv_sec+'"><span style="'+s.secdiv_rule+'"></span><span style="'+s.secdiv_txt+'">SECTION '+b.n+'</span><span style="'+s.secdiv_rule+'"></span></section>';
+  }
+  if(b.t==='co'){
+    var parts = b.x.map(function(ln){ ln=ln.trim(); return ln==='' ? '<br>' : parseInline(ln, s); });
+    return '<section style="'+s.callout_sec+'"><span style="'+s.callout_label+'">'+esc(b.label)+'</span><p style="'+s.p+'">'+parts.join('')+'</p></section>';
+  }
+  if(b.t==='ins'){
+    var insTitle = b.x.length ? parseInline(b.x[0], s) : '';
+    var insDesc = b.x.slice(1).map(function(ln){ ln=ln.trim(); return ln==='' ? '<br>' : parseInline(ln, s); }).join('');
+    return '<section style="'+s.insight_sec+'"><table style="'+s.insight_tbl+'"><tr>'
+      +'<td style="'+s.insight_num_cell+'"><span style="'+s.insight_num+'">'+esc(b.n)+'</span></td>'
+      +'<td style="'+s.insight_body+'"><p style="'+s.insight_title+'">'+insTitle+'</p>'
+      + (insDesc ? '<p style="'+s.insight_desc+'">'+insDesc+'</p>' : '')
+      +'</td></tr></table></section>';
+  }
+  if(b.t==='cmp'){
+    function cmpCell(head, lines, headStyle){
+      var body = lines.map(function(ln){ ln=ln.trim(); return ln==='' ? '<br>' : parseInline(ln, s); }).join('');
+      return '<section style="'+s.cmp_card+'"><p style="'+headStyle+'">'+esc(head)+'</p><p style="'+s.p+'">'+body+'</p></section>';
+    }
+    var h0 = b.h.length>0 ? b.h[0] : '', h1 = b.h.length>1 ? b.h[1] : '';
+    return '<section style="'+s.cmp_sec+'"><table style="'+s.cmp_tbl+'"><tr>'
+      +'<td style="'+s.cmp_td+'">'+cmpCell(h0, b.l, s.cmp_head)+'</td>'
+      +'<td style="'+s.cmp_td+'">'+cmpCell(h1, b.r, s.cmp_head2)+'</td>'
+      +'</tr></table></section>';
   }
   if(b.t==='tb'){
     var th = b.h.map(function(c){ return '<th style="'+s.th+'">'+parseInline(c.trim(), s)+'</th>'; }).join('');
