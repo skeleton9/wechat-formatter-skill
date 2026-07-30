@@ -823,54 +823,65 @@ PREVIEW_TMPL = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>公众号排版预览</title>
 <style>
-  body{margin:0;background:#f2f3f5;font-family:__SANS__;}
-  .bar{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:12px;
+  html,body{height:100%;margin:0;overflow:hidden;}
+  body{display:flex;flex-direction:column;background:#f2f3f5;font-family:__SANS__;}
+  .bar{flex:0 0 auto;z-index:10;display:flex;align-items:center;gap:12px;
        padding:12px 20px;background:#fff;border-bottom:1px solid #ececec;box-shadow:0 1px 6px rgba(0,0,0,0.04);}
   .bar .t{font-size:15px;font-weight:bold;color:#333;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .bar button.copy{border:none;background:#4a90d9;color:#fff;font-size:14px;padding:9px 18px;border-radius:20px;cursor:pointer;font-weight:bold;}
   .bar button.copy:active{transform:scale(0.97);}
-  .selbar{position:sticky;top:53px;z-index:9;background:#fff;border-bottom:1px solid #ececec;padding-bottom:6px;}
+  .selbar{flex:0 0 auto;z-index:9;background:#fff;border-bottom:1px solid #ececec;padding-bottom:6px;overflow:auto;}
   .sel-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 20px 2px;}
   .sel-row .lab{font-size:12px;color:#999;min-width:48px;flex-shrink:0;}
   .sel-row button{border:1px solid #e0e0e0;background:#fafafa;color:#555;font-size:13px;padding:6px 12px;border-radius:14px;cursor:pointer;}
   .sel-row button.active{background:#4a90d9;border-color:#4a90d9;color:#fff;font-weight:bold;}
-  .hint{max-width:740px;margin:14px auto 0;padding:0 16px;font-size:13px;color:#999;}
-  .stage{max-width:740px;margin:10px auto 60px;background:transparent;border-radius:10px;padding:0;box-shadow:0 2px 12px rgba(0,0,0,0.05);}
+  .stage{max-width:740px;margin:0 auto;background:transparent;border-radius:10px;padding:16px 0 48px;box-shadow:none;}
   #wechat-body{font-size:16px;padding:0;border-radius:6px;overflow:hidden;}
-  .toast{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.8);color:#fff;padding:12px 22px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:20;}
+  .toast{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.8);color:#fff;padding:12px 22px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:40;}
   .toast.show{opacity:1;}
   .bar button.mode{border:1px solid #e0e0e0;background:#fafafa;color:#555;font-size:14px;padding:8px 16px;border-radius:20px;cursor:pointer;}
   .bar button.mode:active{transform:scale(0.97);}
-  /* 默认即为左右布局：左编辑、右预览（宽度可拖拽调整） */
-  #mdInput{width:100%;height:80vh;box-sizing:border-box;border:none;outline:none;resize:none;
+  /* 帮助：收到问号里，点击展开 */
+  .help-wrap{position:relative;flex-shrink:0;}
+  .help-btn{width:32px;height:32px;padding:0;border:1px solid #e0e0e0;background:#fafafa;color:#666;
+    border-radius:50%;cursor:pointer;font-size:16px;font-weight:bold;line-height:1;display:inline-flex;align-items:center;justify-content:center;}
+  .help-btn:hover,.help-btn[aria-expanded="true"]{background:#4a90d9;border-color:#4a90d9;color:#fff;}
+  .help-pop{display:none;position:absolute;right:0;top:calc(100% + 8px);width:min(440px,calc(100vw - 32px));
+    background:#fff;border:1px solid #ececec;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.14);
+    padding:14px 16px;font-size:13px;color:#666;line-height:1.7;z-index:30;}
+  .help-pop.open{display:block;}
+  .help-pop strong{color:#333;}
+  /* 默认即为左右布局：左编辑、右预览（各自独立滚动，不带动整页） */
+  #mdInput{width:100%;height:100%;box-sizing:border-box;border:none;outline:none;resize:none;
     padding:18px 20px;font-family:Consolas,'Courier New',monospace;font-size:14px;line-height:1.7;color:#2b2b2b;background:#fbfbfd;tab-size:2;}
   #mdInput:focus{background:#fff;}
-  .split{display:flex;align-items:stretch;gap:0;max-width:1320px;margin:10px auto 60px;border:1px solid #ececec;border-radius:10px;overflow:hidden;background:#fff;--edit-w:44%;}
-  .editor-pane{flex:0 0 var(--edit-w,44%);background:#fbfbfd;min-width:0;overflow:auto;}
-  .preview-pane{flex:1 1 56%;min-width:0;overflow:auto;}
+  .split{flex:1 1 auto;min-height:0;display:flex;align-items:stretch;gap:0;width:100%;margin:0;
+    border:none;border-top:1px solid #ececec;background:#fff;--edit-w:44%;}
+  .editor-pane{flex:0 0 var(--edit-w,44%);background:#fbfbfd;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
+  .preview-pane{flex:1 1 56%;min-width:0;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;}
   .resizer{flex:0 0 7px;width:7px;cursor:col-resize;background:#e6e6ea;position:relative;}
   .resizer:hover,.resizer.active{background:#4a90d9;}
   .resizer::after{content:"";position:absolute;left:2px;top:50%;transform:translateY(-50%);width:2px;height:30px;background:#b9b9c2;border-radius:1px;}
-  .stage{margin:0 auto;box-shadow:none;max-width:740px;}
   /* 手机宽度模式：右侧预览锁定为手机宽度，编辑区取剩余空间 */
   body.phone .editor-pane{flex:1 1 auto;}
   body.phone .resizer{display:none;}
   body.phone .preview-pane{flex:0 0 390px;}
   body.phone .stage{max-width:375px;}
-  /* 仅预览模式：隐藏编辑区与分隔条，预览占满整宽 */
+  /* 仅预览模式：隐藏编辑区与分隔条，预览占满并独立滚动 */
   body.preview-only .editor-pane{display:none;}
   body.preview-only .resizer{display:none;}
-  body.preview-only .split{display:block;max-width:740px;margin:10px auto 60px;border:none;background:transparent;overflow:visible;}
-  body.preview-only .preview-pane{flex:none;overflow:visible;}
+  body.preview-only .split{display:flex;max-width:none;margin:0;border:none;background:#f2f3f5;}
+  body.preview-only .preview-pane{flex:1 1 auto;overflow:auto;}
+  body.preview-only .stage{max-width:740px;padding-left:16px;padding-right:16px;}
   @media (max-width:899px){
-    /* 窄屏：默认仅预览，点“编辑”切到全宽编辑；分隔条在窄屏隐藏 */
-    .split{display:block;max-width:740px;margin:10px auto 60px;border:none;background:transparent;overflow:visible;}
+    /* 窄屏：默认仅预览，点“编辑”切到全宽编辑；分隔条在窄屏隐藏；仍保持区域内滚动 */
+    .split{display:flex;max-width:none;margin:0;border:none;background:#f2f3f5;}
     .editor-pane{display:none;}
-    .preview-pane{display:block;overflow:visible;}
-    body:not(.preview-only) .editor-pane{display:block;}
+    .preview-pane{display:block;flex:1 1 auto;overflow:auto;}
+    body:not(.preview-only) .editor-pane{display:flex;flex:1 1 auto;}
     body:not(.preview-only) .preview-pane{display:none;}
     .resizer{display:none;}
-    #mdInput{height:62vh;}
+    .stage{padding-left:12px;padding-right:12px;}
   }
 </style>
 </head>
@@ -881,13 +892,19 @@ PREVIEW_TMPL = """<!DOCTYPE html>
     <button class="mode" id="editToggle">👁 仅预览</button>
     <button class="copy" id="copyBtn">📋 复制正文</button>
     __EXTRA_BTNS__
+    <div class="help-wrap">
+      <button type="button" class="help-btn" id="helpBtn" title="使用说明" aria-label="使用说明" aria-expanded="false" aria-controls="helpPop">?</button>
+      <div class="help-pop" id="helpPop" role="dialog" aria-label="使用说明">
+        <strong>使用说明</strong><br>
+        标题请在公众号后台单独填写（本页标题不进入复制区）。页面默认为「左编辑 / 右预览」布局，左侧改稿右侧实时刷新；左右可分别滚动。中间分隔条可拖动调整左右宽度；点「📱 手机」可把右侧预览锁定为手机宽度；点「👁 仅预览」可隐藏编辑区只看排版。上方两组可分别选择「配色」与「结构格式」自由组合；点击「复制正文」会以当前组合复制，到后台 Ctrl/⌘+V 粘贴即可保留格式。
+      </div>
+    </div>
     <input id="fileInput" type="file" accept=".md,.markdown,.txt,text/markdown" style="display:none">
   </div>
   <div class="selbar">
     <div class="sel-row"><span class="lab">配色</span><span id="colorBtns">__COLOR_BTNS__</span></div>
     <div class="sel-row"><span class="lab">结构格式</span><span id="formatBtns">__FORMAT_BTNS__</span></div>
   </div>
-  <div class="hint">标题请在公众号后台单独填写（本页标题不进入复制区）。页面默认为「左编辑 / 右预览」布局，左侧改稿右侧实时刷新；中间分隔条可拖动调整左右宽度，点「📱 手机」可把右侧预览锁定为手机宽度查看窄屏效果，点「👁 仅预览」可隐藏编辑区只看排版。上方两组可分别选择「配色」与「结构格式」自由组合，正文实时更新；点击「复制正文」会以当前组合复制，到后台 Ctrl/⌘+V 粘贴即可保留格式。</div>
   <div class="split" id="split">
     <div class="pane editor-pane" id="editorPane">
       <textarea id="mdInput" spellcheck="false"></textarea>
@@ -1163,6 +1180,17 @@ function copyHTML(){
   }
 }
 document.getElementById('copyBtn').addEventListener('click',copyHTML);
+(function helpPop(){
+  var btn=document.getElementById('helpBtn'), pop=document.getElementById('helpPop');
+  if(!btn||!pop) return;
+  function close(){ pop.classList.remove('open'); btn.setAttribute('aria-expanded','false'); }
+  function toggle(e){ e.stopPropagation(); var on=!pop.classList.contains('open');
+    pop.classList.toggle('open', on); btn.setAttribute('aria-expanded', on?'true':'false'); }
+  btn.addEventListener('click', toggle);
+  pop.addEventListener('click', function(e){ e.stopPropagation(); });
+  document.addEventListener('click', close);
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') close(); });
+})();
 document.getElementById('colorBtns').addEventListener('click',function(e){
   if(e.target && e.target.getAttribute('data-color')){ applyCombo(e.target.getAttribute('data-color'), curFormat); }
 });
