@@ -21,7 +21,8 @@ build_wechat_html.py — Markdown -> 公众号排版 HTML（配色 × 结构格�
           · 旧写法 `SECTION 01` 仍兼容，渲染为 "— SECTION 01 —"
           · 单独 `---`（无文字）仍是普通无文字分隔线
       - 标签卡片：引用块首行写 `> [!核心判断]` → 渲染为带标签的强调卡片
-      - 编号洞察卡：引用块首行写 `> [!01] 标题` → 大号数字 + 标题 + 描述的卡片
+      - 编号贴士卡：引用块首行写 `> [!01] 标题` → 大字号数字 + 标题 + 描述，渲染为带浅底 + 左主题色条的小卡片（适合短提醒/要点归纳）
+      - 编号大标题：H2 以「数字 + 分隔符」开头，如 `## 01 章节标题` → 渲染为「大字号数字 + 章节标题 + 1px 分隔线」独立头部，其下为普通满宽正文段落（不进卡片、不使用 > 引用，满宽阅读）。用于长篇分论点。
       - 对比双栏：引用块首行写 `> [!compare] 左标题 | 右标题`，后续每行 `> 左内容 | 右内容` 自动分两列（逐行对照，无需 `|||`）
         → 渲染为两栏对照卡（左主色 / 右绿色，制造对照）
   * 默认组合（--theme 配色 + --format 格式）由 Python 渲染，保证复制内容正确无误；
@@ -226,11 +227,11 @@ def _variant_overrides(p, f, variant):
     def q_box(q, radius="10px", shadow="0 4px 14px rgba(0,0,0,0.06)", bar=""):
         left = f"border-left:{bar} solid {q['bd']};" if bar else ""
         return (f"padding:1.4em 18px;border-radius:{radius};font-size:15px;line-height:1.75;"
-                f"color:{q['fg']};font-family:{f};border:1px solid {q['bd']};background-color:{q['bg']};"
+                f"color:{q['fg']};font-family:{f};border-top:1px solid {q['bd']};border-right:1px solid {q['bd']};border-bottom:1px solid {q['bd']};border-left:1px solid {q['bd']};background-color:{q['bg']};"
                 f"box-shadow:{shadow};{left}")
     def q_frame(q):
         return (f"padding:1.4em 18px;border-radius:4px;font-size:15px;line-height:1.75;"
-                f"color:{q['fg']};font-family:{f};border:1px solid {q['bd']};outline:1px solid {q['bd']};"
+                f"color:{q['fg']};font-family:{f};border-top:1px solid {q['bd']};border-right:1px solid {q['bd']};border-bottom:1px solid {q['bd']};border-left:1px solid {q['bd']};outline:1px solid {q['bd']};"
                 f"outline-offset:3px;background-color:{q['bg']};")
     def q_tape(q):
         return (f"padding:1.4em 18px;border-radius:0 10px 10px 0;font-size:15px;line-height:1.75;"
@@ -296,7 +297,7 @@ def _variant_overrides(p, f, variant):
         o["strong"] = (f"font-weight:bold;color:#3a2e22;background-color:rgba(255,221,87,0.55);padding:0 3px;border-radius:2px;")
         for k, q in (("quote_blue", qb), ("quote_orange", qo), ("quote_green", qg)):
             o[k] = (f"padding:1.4em 18px;border-radius:10px;font-size:15px;line-height:1.75;"
-                    f"color:{q['fg']};font-family:{f};border:2px dashed {q['bd']};background-color:{q['bg']};")
+                    f"color:{q['fg']};font-family:{f};border-top:2px dashed {q['bd']};border-right:2px dashed {q['bd']};border-bottom:2px dashed {q['bd']};border-left:2px dashed {q['bd']};background-color:{q['bg']};")
         o["q_glyph"] = ""
     elif variant == "minimal":
         o["h2"] = (f"display:block;margin:0;padding:8px 0;text-align:center;font-size:19px;font-weight:bold;"
@@ -359,9 +360,9 @@ def make_styles(colors, variant):
         "hr_dot": f"display:inline-block;margin:0 12px;color:{colors['hr']};font-size:14px;vertical-align:middle;",
         "table_sec": f"box-sizing:border-box;padding:0.75em 0;overflow-x:auto;-webkit-overflow-scrolling:touch;",
         "table": f"border-collapse:collapse;width:100%;font-size:14px;line-height:1.6;{_txt(f, colors['text'])}",
-        "th": f"border:1px solid {colors['t_bd']};padding:8px 12px;background-color:{colors['th_bg']};"
+        "th": f"border-top:1px solid {colors['t_bd']};border-right:1px solid {colors['t_bd']};border-bottom:1px solid {colors['t_bd']};border-left:1px solid {colors['t_bd']};padding:8px 12px;background-color:{colors['th_bg']};"
               f"{_txt(f, colors['th_fg'])}font-weight:bold;text-align:left;",
-        "td": f"border:1px solid {colors['t_bd']};padding:8px 12px;text-align:left;{_txt(f, colors['text'])};",
+        "td": f"border-top:1px solid {colors['t_bd']};border-right:1px solid {colors['t_bd']};border-bottom:1px solid {colors['t_bd']};border-left:1px solid {colors['t_bd']};padding:8px 12px;text-align:left;{_txt(f, colors['text'])};",
         "wrapper": f"box-sizing:border-box;width:100%;margin:0;background-color:{colors['body_bg']};padding:0.6em 16px;",
         "accent": colors["accent"],
         "inline_bg": colors["inline_bg"],
@@ -370,7 +371,7 @@ def make_styles(colors, variant):
         "secdiv_txt": f"display:inline-block;margin:0 14px;color:{colors['accent']};font-size:13px;letter-spacing:3px;font-weight:bold;font-family:{f};",
         "callout_sec": f"box-sizing:border-box;padding:1.2em 18px;border-radius:8px;border-left:4px solid {colors['accent']};background-color:{colors['inline_bg']};",
         "callout_label": f"display:block;font-size:13px;font-weight:bold;letter-spacing:2px;color:{colors['accent']};font-family:{f};margin:0 0 6px;",
-        # 编号洞察卡：大号数字 + 标题 + 描述
+        # 编号贴士卡：大字号数字 + 标题 + 描述，带浅底卡片 + 左主题色条（内容较短的「卡」）
         "insight_sec": f"box-sizing:border-box;padding:1.1em 16px;border-radius:10px;border-left:4px solid {colors['accent']};background-color:{colors['inline_bg']};",
         "insight_tbl": "border-collapse:collapse;width:100%;",
         "insight_num_cell": "vertical-align:top;width:56px;",
@@ -378,9 +379,17 @@ def make_styles(colors, variant):
         "insight_body": "vertical-align:top;",
         "insight_title": f"display:block;margin:0 0 5px;font-family:{f};font-size:17px;font-weight:bold;line-height:1.45;color:{colors['heading']};",
         "insight_desc": f"display:block;margin:0;{_txt(f, colors['text'])}font-size:15px;line-height:1.7;",
+        # 编号大标题：H2 以「数字+分隔符」开头时渲染为「大字号数字 + 章节标题 + 1px 分隔线」，
+        # 其下正文用普通满宽段落（不进卡片、不使用 > 引用），满宽阅读。
+        "bighead_head": f"box-sizing:border-box;padding:1.4em 0 0.55em;border-bottom:1px solid {colors['hr']};",
+        "bighead_tbl": "border-collapse:collapse;width:100%;",
+        "bighead_num_cell": "vertical-align:middle;width:62px;",
+        "bighead_num": f"display:block;font-family:{f};font-size:44px;line-height:1;font-weight:bold;color:{colors['accent']};letter-spacing:-1px;",
+        "bighead_title_cell": "vertical-align:middle;",
+        "bighead_title": f"display:block;font-family:{f};font-size:19px;font-weight:bold;line-height:1.4;color:{colors['heading']};",
         # 对比双栏：两栏对照卡（左=主色 / 右=绿色，制造对照）
         "cmp_sec": f"box-sizing:border-box;padding:0.4em 0;",
-        "cmp_card": f"box-sizing:border-box;padding:0;border-radius:10px;overflow:hidden;border:1px solid {colors['t_bd']};background-color:#ffffff;",
+        "cmp_card": f"box-sizing:border-box;padding:0;border-radius:10px;overflow:hidden;border-top:1px solid {colors['t_bd']};border-right:1px solid {colors['t_bd']};border-bottom:1px solid {colors['t_bd']};border-left:1px solid {colors['t_bd']};background-color:#ffffff;",
         "cmp_tbl": f"border-collapse:collapse;width:100%;font-size:15px;line-height:1.7;{_txt(f, colors['text'])}",
         "cmp_th": f"padding:10px 14px;text-align:center;font-family:{f};font-weight:bold;font-size:15px;color:{colors['accent']};background-color:{colors['inline_bg']};border-bottom:1px solid {colors['t_bd']};",
         "cmp_th2": f"padding:10px 14px;text-align:center;font-family:{f};font-weight:bold;font-size:15px;color:{colors['qg_bd']};background-color:{colors['qg_bg']};border-bottom:1px solid {colors['t_bd']};border-left:1px solid {colors['t_bd']};",
@@ -469,6 +478,19 @@ def render_codeblock(lines, s):
 
 
 def render_heading(level, text, s):
+    # H2 以「数字 + 分隔符」开头 → 渲染为「大字号数字 + 章节标题 + 分隔线」大标题，
+    # 其下正文用普通满宽段落（不进卡片、不使用 > 引用）。
+    if level == 2:
+        m = re.match(r"^\s*(\d{1,3})[.、．｜|)\s]\s*(.+)$", text)
+        if m:
+            num, title = m.group(1), m.group(2).strip()
+            return (
+                f'<section style="{s["bighead_head"]}">'
+                f'<table style="{s["bighead_tbl"]}"><tr>'
+                f'<td style="{s["bighead_num_cell"]}"><span style="{s["bighead_num"]}">{esc_text(num)}</span></td>'
+                f'<td style="{s["bighead_title_cell"]}"><span style="{s["bighead_title"]}">{parse_inline(title, s)}</span></td>'
+                f'</tr></table></section>'
+            )
     key = f"h{level}" if level in (2, 3, 4, 5, 6) else "h4"
     inner = parse_inline(text, s)
     return f'<section style="{s["sec_head"]}"><h{level} style="{s[key]}">{inner}</h{level}></section>'
@@ -544,6 +566,12 @@ def render_callout(label, lines, s):
 
 
 def render_insight(num, lines, s):
+    """编号贴士卡：大字号数字 + 标题 + 描述，带浅底卡片 + 左主题色条。
+
+    用于内容较短的「卡」（如一句话提醒、要点归纳）。正文描述进卡片单元格。
+    若需要「大数字 + 章节标题 + 满宽正文」的长篇结构，请用 H2 数字标题
+    （`## 01 章节标题`，其下为普通满宽段落），不要用本卡片。
+    """
     title = parse_inline(" ".join(lines[0:1]).strip(), s) if lines else ""
     desc_parts = []
     for ln in lines[1:]:
@@ -833,21 +861,21 @@ PREVIEW_TMPL = """<!DOCTYPE html>
   .selbar{flex:0 0 auto;z-index:9;background:#fff;border-bottom:1px solid #ececec;padding-bottom:6px;overflow:auto;}
   .sel-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 20px 2px;}
   .sel-row .lab{font-size:12px;color:#999;min-width:48px;flex-shrink:0;}
-  .sel-row button{border:1px solid #e0e0e0;background:#fafafa;color:#555;font-size:13px;padding:6px 12px;border-radius:14px;cursor:pointer;}
+  .sel-row button{border-top:1px solid #e0e0e0;border-right:1px solid #e0e0e0;border-bottom:1px solid #e0e0e0;border-left:1px solid #e0e0e0;background:#fafafa;color:#555;font-size:13px;padding:6px 12px;border-radius:14px;cursor:pointer;}
   .sel-row button.active{background:#4a90d9;border-color:#4a90d9;color:#fff;font-weight:bold;}
   .stage{max-width:740px;margin:0 auto;background:transparent;border-radius:10px;padding:16px 0 48px;box-shadow:none;}
   #wechat-body{font-size:16px;padding:0;border-radius:6px;overflow:hidden;}
   .toast{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.8);color:#fff;padding:12px 22px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:40;}
   .toast.show{opacity:1;}
-  .bar button.mode{border:1px solid #e0e0e0;background:#fafafa;color:#555;font-size:14px;padding:8px 16px;border-radius:20px;cursor:pointer;}
+  .bar button.mode{border-top:1px solid #e0e0e0;border-right:1px solid #e0e0e0;border-bottom:1px solid #e0e0e0;border-left:1px solid #e0e0e0;background:#fafafa;color:#555;font-size:14px;padding:8px 16px;border-radius:20px;cursor:pointer;}
   .bar button.mode:active{transform:scale(0.97);}
   /* 帮助：收到问号里，点击展开 */
   .help-wrap{position:relative;flex-shrink:0;}
-  .help-btn{width:32px;height:32px;padding:0;border:1px solid #e0e0e0;background:#fafafa;color:#666;
+  .help-btn{width:32px;height:32px;padding:0;border-top:1px solid #e0e0e0;border-right:1px solid #e0e0e0;border-bottom:1px solid #e0e0e0;border-left:1px solid #e0e0e0;background:#fafafa;color:#666;
     border-radius:50%;cursor:pointer;font-size:16px;font-weight:bold;line-height:1;display:inline-flex;align-items:center;justify-content:center;}
   .help-btn:hover,.help-btn[aria-expanded="true"]{background:#4a90d9;border-color:#4a90d9;color:#fff;}
   .help-pop{display:none;position:absolute;right:0;top:calc(100% + 8px);width:min(440px,calc(100vw - 32px));
-    background:#fff;border:1px solid #ececec;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.14);
+    background:#fff;border-top:1px solid #ececec;border-right:1px solid #ececec;border-bottom:1px solid #ececec;border-left:1px solid #ececec;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.14);
     padding:14px 16px;font-size:13px;color:#666;line-height:1.7;z-index:30;}
   .help-pop.open{display:block;}
   .help-pop strong{color:#333;}
@@ -1069,6 +1097,16 @@ function parseMarkdown(text){
 function renderBlock(b, s){
   if(b.t==='h'){
     var lv = (b.l>=2 && b.l<=6) ? b.l : 4;
+    if(lv===2){
+      var hm = (b.x||'').match(/^\\s*(\\d{1,3})[.、．｜|)\\s]\\s*(.+)$/);
+      if(hm){
+        var hnum = hm[1], httl = hm[2].trim();
+        return '<section style="'+s.bighead_head+'"><table style="'+s.bighead_tbl+'"><tr>'
+          +'<td style="'+s.bighead_num_cell+'"><span style="'+s.bighead_num+'">'+esc(hnum)+'</span></td>'
+          +'<td style="'+s.bighead_title_cell+'"><span style="'+s.bighead_title+'">'+parseInline(httl, s)+'</span></td>'
+          +'</tr></table></section>';
+      }
+    }
     return '<section style="'+s.sec_head+'"><h'+lv+' style="'+s['h'+lv]+'">'+parseInline(b.x, s)+'</h'+lv+'></section>';
   }
   if(b.t==='p'){
@@ -1287,11 +1325,11 @@ APP_SAMPLE_MD = """# 公众号排版编辑器（示例）
 
 单独一行写 `--- 任意文字` 就能插入一条带文字的分栏线，文字随便改（旧的 `SECTION 01` 也仍然可用）。
 
-> [!01] 标签卡片
-用 `> [!标签] 内容` 写带小标签的强调卡片，区别于普通引用。
+> [!01] 编号贴士卡
+用 `> [!01] 标题` 写带编号的小卡片（大数字 + 标题 + 描述，浅底 + 左条），适合短提醒、要点归纳。普通的标签卡片用 `> [!标签] 内容`。
 
-> [!02] 编号洞察卡
-用 `> [!01] 标题` 写「大号数字 + 标题 + 描述」的卡片。
+> [!02] 编号大标题
+用 `## 01 章节标题`（注意是 H2，不是引用）写「大字号数字 + 章节标题 + 分隔线」的章节大标题，其下是普通满宽正文段落，不进卡片、不用 `>` 引用。长篇分论点用它，短提醒才用上面的编号卡。
 
 > [!compare] 过去写法 | 现在写法
 > 纯文字堆砌 | 结构化卡片
